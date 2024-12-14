@@ -1,15 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth } from "../../../Firebase"; // Firebase setup
+import { auth } from "../../../Firebase"; 
 import { onAuthStateChanged } from "firebase/auth";
 import EventForm from "../../../components/EventForm";
 import EventUpdateForm from "../../../components/EventUpdateForm";
-import EventCard from "../../../components/EventCard"; // Import new EventCard component
-import Sidebar from "../../../components/Sidebar"; // Import Sidebar component
+import EventCard from "../../../components/EventCard";
+import Sidebar from "../../../components/Sidebar"; 
+
 
 const EventsPage = () => {
-  const [showForm, setShowForm] = useState(false); // For toggling form visibility
+  const [showForm, setShowForm] = useState(false); 
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [events, setEvents] = useState<
     {
@@ -20,14 +21,10 @@ const EventsPage = () => {
       lastDateOfRegistration: string;
       dateCreated: string;
       dateModified: string;
-      imageURL: string;
+      imageURL: string; 
       registrationLink: string;
     }[]
   >([]);
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", "dark");
-  }, []);
 
   const [selectedEvent, setSelectedEvent] = useState<{
     id: string;
@@ -39,58 +36,49 @@ const EventsPage = () => {
     dateModified: string;
     imageURL: string;
     registrationLink: string;
-  } | null>(null); // For sidebar details
+  } | null>(null); 
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Track sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
 
   useEffect(() => {
-    const checkAdmin = async (uid: string) => {
-      try {
-        const response = await fetch(`/api/check-admin?uid=${uid}`);
-        const { isAdmin } = await response.json();
-        setIsAdminLoggedIn(isAdmin);
-      } catch (error) {
-        console.error("Error checking admin status:", error);
-        setIsAdminLoggedIn(false);
-      }
-    };
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
-        checkAdmin(user.uid);
-      } else {
-        setIsAdminLoggedIn(false);
+        const uid = user.uid;
+        try {
+          const resp = await fetch(`/api/admin?uid=${uid}`);
+          const data = await resp.json();
+          if (data.isAdmin) {
+            setIsAdminLoggedIn(true);
+          }
+        } catch (error) {
+          console.log("Error getting document:", error);
+        }
       }
     });
+  });
 
-    return () => unsubscribe();
-  }, []);
-
-  // Fetching events through the backend
   const fetchEvents = async () => {
-    try {
-      const response = await fetch("/api/events");
-      const { events } = await response.json();
-      setEvents(events);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-    }
+    const resp = await fetch("/api/events"); 
+    const data = await resp.json();
+    const eventsList = data.events;
+    setEvents(eventsList);
   };
 
-  useEffect(() => {
+  useEffect(() => {  
     fetchEvents();
   }, []);
 
-  // Deleting an event through the backend
-  const deleteEvent = async (eventId: string) => {
+  // Deleting an event
+  const deleteEvent = async (eventId: string , event : any) => {
     try {
-      await fetch(`/api/events?eventid=${eventId}`, {
+      await fetch(`/api/events/?eventid=${eventId}`, {
         method: "DELETE",
       });
-      fetchEvents(); // Refresh event list
+      setEvents((prevEvents) => prevEvents.filter((event) => event.id !== eventId));
     } catch (error) {
-      console.error("Error deleting event:", error);
+      console.error("Error deleting document: ", error);
     }
+    fetchEvents(); 
   };
 
   const handleEventSelect = (event: {
@@ -102,7 +90,7 @@ const EventsPage = () => {
     dateCreated: string;
     dateModified: string;
     imageURL: string;
-    registrationLink: string;
+    registrationLink: string; // Ensure registrationLink is included
   }) => {
     setSelectedEvent(event);
     setIsSidebarOpen(true);
@@ -118,8 +106,11 @@ const EventsPage = () => {
   const pastEvents = events.filter(
     (event) => new Date(event.eventDate) < today
   );
+  const presentEvents = events.filter(
+    (event) => new Date(event.eventDate).toDateString() === today.toDateString()
+  );
   const futureEvents = events.filter(
-    (event) => new Date(event.eventDate) >= today
+    (event) => new Date(event.eventDate) > today
   );
 
   return (
@@ -137,36 +128,43 @@ const EventsPage = () => {
       </div>
 
       {/* Event Form to Add New Event */}
-      {isAdminLoggedIn && showForm && <EventForm refreshEvents={fetchEvents} />}
+      {isAdminLoggedIn && showForm && <EventForm />}
 
       {/* Displaying the Events */}
       <div className="mt-2">
-        {futureEvents.length > 0 && (
+        {/* Present Events */}
+        
+
+        {/* Future Events */}
+        {/* <h2 className="text-2xl font-bold mb-4 mt-8">CurreEvents</h2> */}
+        {futureEvents.length > 0 ? (
           <div className="flex justify-around">
             {futureEvents.map((event) => (
               <EventCard
                 key={event.id}
                 event={event}
                 isAdminLoggedIn={isAdminLoggedIn}
-                onDelete={deleteEvent}
+              onDelete={() => deleteEvent(event.id , event)} 
                 onSelect={handleEventSelect}
               />
             ))}
           </div>
+        ) : (
+          <p>No presents events available.</p>
         )}
       </div>
 
       {/* Past Events */}
       <h2 className="text-3xl font-bold mb-8 mt-16 ml-4 text-center">Past Events</h2>
       {pastEvents.length > 0 ? (
-        <div className="flex flex-wrap justify-evenly gap-3">
+        <div className="sm:flex justify-around">
           {pastEvents.map((event) => (
             <EventCard
               key={event.id}
               event={event}
               isAdminLoggedIn={isAdminLoggedIn}
-              onDelete={deleteEvent}
-              onSelect={handleEventSelect} // Pass handleEventSelect to open sidebar
+              onDelete={() => deleteEvent(event.id , event)} 
+              onSelect={handleEventSelect} 
             />
           ))}
         </div>
@@ -190,7 +188,6 @@ const EventsPage = () => {
           <EventUpdateForm
             eventId={selectedEvent.id}
             initialEventData={selectedEvent}
-            refreshEvents={fetchEvents}
           />
         </div>
       )}
